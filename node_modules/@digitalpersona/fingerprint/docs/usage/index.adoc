@@ -1,0 +1,326 @@
+= DigitalPersona Fingerprint API
+:table-caption!:
+
+toc::[]
+
+== Overview
+
+As a part of DigitalPersona Access Management API (DPAM), the
+`@digitalpersona/fingerprint` library provides Javascript API allowing to communicate
+with fingerprint readers from web browsers.
+
+IMPORTANT: The API is designed to be used in a browser environment only!
+It is not a NodeJS library!
+
+== Installing
+
+```shell
+> npm install @digitalpersona/fingerprint @digitalpersona/websdk
+```
+
+Once the package is installed, it can be imported into your browser application.
+
+The `@digitalpersona/fingerprint` provides only a legacy IIFE module.
+No modern ESM module is provided.
+
+The IIFE module works in legacy and/or for simple "build-less" applications,
+with no requirements for bundling and dead code elimination. The IIFE module
+must be imported using the HTML `<script>` tag. You may use a CDN like unpkg.com:
+`<script src="https://unpkg.com/@digitalpersona/fingerprint/dist/fingerprint.sdk.js">`.
+
+The IIFE module adds a global `Fingerprint.WebApi` property to the `window` object.
+When using bundlers like Rollup, Webpack, etc, the `"Fingerprint.WebApi"` object must be
+added to the list of "globals", and the `"@digitalpersona/fingerprint"` must be added
+to the list of "external" modules, so it will not be bundled into the final
+output.
+
+IMPORTANT: The library has a peer dependecy on the `@digitalpersona/websdk` package,
+  which provides a JavaScript interface to the native API.
+  Make sure the `@digitalpersona/websdk` is also installed as a runtime dependency
+  into your project. The `@digitalpersona/websdk` is currently available only
+  as an IIFE module, so you also must import it using a `<script>` tag,
+  and add `"WebSdk"` to the lsit of "globals", and add `"@digitalpersona/websdk"`
+  to the list of "external" modules to prevent bundling.
+
+If you are using a vanilla Javascript application, you can add the following
+`script` tag to your HTML page:
+
+[separator=¦]
+|===
+a¦
+.index.html
+[source,html]
+----
+<script type="text/javascript" src="scripts/websdk.client.ui.js"></script>
+<script type="text/javascript" src="scripts/fingerprint.sdk.js"></script>
+<script type="text/javascript" src="index.js"></script>
+----
+
+.index.js
+[source,js]
+----
+/// <reference types="@digitalpersona/websdk" />
+/// <reference types="@digitalpersona/fingerprint" />
+
+class FingerprintSigninControl
+{
+  constructor() {
+    this.api = new Fingerprint.WebApi();
+    this.api.onSamplesAcquired = this.onSamplesAcquired.bind(this);
+    ...
+  }
+
+  async startCapture() {
+    try {
+      await this.api.subscribe();
+      ...
+    } catch(e) { ... }
+  }
+
+  async stopCapture() {
+    try {
+      await this.api.unsubscribe();
+      ...
+    } catch(e) { ... }
+  }
+
+  async onSamplesAcquired(event) {
+   ...
+  }
+}
+...
+
+----
+|===
+
+
+If you are using Angular project (Typescript + bundler), you can
+import the library as follows:
+
+[separator=¦]
+|===
+a¦
+.angular.json
+[source,json]
+----
+{
+  "projects": {
+    "my-app": {
+      "architect": {
+        "build": {
+          "options": {
+            "preserveSymlinks": true,  // https://github.com/angular/angular/issues/54147
+            "index": "src/index.html",
+            "browser": "src/main.ts",
+            "scripts": [
+              "./node_modules/@digitalpersona/websdk/dist/websdk.client.ui.js",
+              "./node_modules/@digitalpersona/fingerprint/dist/fingerprint.sdk.js"
+            ]
+          }
+        },
+      }
+    }
+  }
+}
+----
+
+.app.component.ts
+[source,typescript]
+----
+/// <reference types="@digitalpersona/websdk" />
+/// <reference types="@digitalpersona/fingerprint" />
+
+const api = new Fingerprint.WebApi();
+...
+
+----
+|===
+
+NOTE: The `projects.my-app.architect.build.scripts` property in the `angular.json`
+is the https://angular.dev/reference/configs/workspace-config#build-target[Angular's way]
+to bundle external modules like `@digitalpersona/websdk` and `@digitalpersona/fingerprint`
+as if they would be loaded with the `<script>` tag.
+
+NOTE: The `/// <reference types="..." />` need to be added avoid TypeScript
+typing errors.
+You may also need to set https://www.typescriptlang.org/tsconfig/#moduleResolution[`"moduleResolution": "bundler"`]
+in your `tsconfig.json`, to tell TypeScript to use the modern module resolution algorithm.
+
+== Usage
+
+In a typical use case, users navigate to a logon (or fingerprint enrollment) page,
+and there they are presented with a fingerprint logon/enrollment UI. The page either
+starts the fingerprint capture process automatically, or allows the user to start and
+cancel the fingerprint capture process by clicking UI elements like buttons.
+
+In your fingerprint signin controller class, create an instance of a `Fingerprint.WebApi`
+class and subscribe to its events:
+
+[separator=¦]
+|===
+a¦
+
+.fingerprintSignin.component.ts
+[source,typescript]
+----
+// NOTE: make sure you import only typings here, not a code!
+// Also make sure this is not a NodeJS module. Fingerprint API is a browser-only library!
+
+/// <reference types="@digitalpersona/websdk" />
+/// <reference types="@digitalpersona/fingerprint" />
+
+export class FingerprintSignin
+{
+    constructor() {
+      this.api = new Fingerprint.WebApi();
+
+      this.api.onDeviceConnected = this.this.onDeviceConnected.bind(this);
+      this.api.onDeviceDisconnected  this.this.onDeviceDisconnected.bind(this);
+      this.api.onSamplesAcquired  this.this.onSamplesAcquired.bind(this);
+      this.api.onQualityReported  this.this.onQualityReported.bind(this);
+      this.api.onErrorOccurred  this.this.onErrorOccurred.bind(this);
+      this.api.onAcquisitionStarted  this.this.onAcquisitionStarted.bind(this);
+      this.api.onAcquisitionStopped  this.this.onAcquisitionStopped.bind(this);
+
+      this.capturing = false;
+    }
+
+    // Event handlers
+    async onDeviceConnected(event) { ... }
+    async onDeviceDisconnected(event) { ... }
+    async onSamplesAcquired(event) { ... }
+    async onQualityReported(event) { ... }
+    async onErrorOccurred(event) { ... }
+    async onAcquisitionStarted(event) { ... }
+    async onAcquisitionStopped(event) { ... }
+    ...
+}
+----
+|===
+
+The Fingerprint API requires a HID DigitalPersona Agent running on a client machine.
+This agent provides a secure communication channel between a browser and a fingerprint
+device driver.
+
+The DigitalPersona Agent is native Windows application which is a part of
+HID DigitalPersona clients, like:
+
+* HID DigitalPersona Worksation,
+* HID DIgitalPersona Kiosk
+* HID Authentication Device Client (ADC, former Lite Client).
+
+If you expect your users may not have any of HID DigitalPersona clients installed,
+provide them with a https://digitalpersona.hidglobal.com/lite-client/[link
+to the HID ADC download], appearing on a reader communication error:
+
+
+[separator=¦]
+|===
+a¦
+
+.fingerprintSignin.component.html
+[source,html]
+----
+<div class="reader-communication-error">
+  Cannot connect to you fingerprint device.
+  Make sure the device is connected.
+  If you do not use HID DigitalPersona Workstation or Kiosk,
+  you may need to download and install the
+  <a href="https://digitalpersona.hidglobal.com/lite-client/">
+    HID Authentication Device Client
+  </a>.
+</div>
+----
+
+.fingerprintSignin.component.ts
+[source,typescript]
+----
+class FingerprintSignin
+{
+    ...
+    async onCommunicationFailed(event) {
+        // TODO: display the `.reader-communication-error` block
+        ...
+    }
+}
+----
+|===
+
+To start capturing fingerprint data, start listening for fingerprint events
+using the `subscribe()` method; to stop listening, use the `unsibsribe()` method:
+
+[separator=¦]
+|===
+a¦
+
+[source,typescript]
+----
+class FingerprintSignin {
+    ....
+    async startCapture() {
+        if (this.capturing) return;
+        try {
+            // in this example, we ask fingerprint samples to be in PNG format
+            // but you may also use other formats like RAW, WSQ, etc.
+            await this.api.startAcquisition(Fingerprint.SampleFormat.PngImage);
+            this.capturing = true;
+        } catch (error) {
+            this.handleError(error);
+        }
+    }
+
+    async stopCapture() {
+        if (!this.capturing) return;
+        try {
+            await this.api.startAcquisition();
+            this.capturing = false;
+        } catch (error) {
+            this.handleError(error);
+        }
+    }
+}
+----
+|===
+
+When a finger is presented, one or more samples of fingerprint data will be produced
+and passed to the `onSamplesAcquired` event handler. The samples are passed as an array of
+`FingerprintSample` objects.
+
+[separator=¦]
+|===
+a¦
+
+[source,typescript]
+----
+class FingerprintSignin {
+    ...
+    async onSamplesAquired(event: SamplesAcquiredEvent) {
+        // get fingerprint reader and samples
+        const reader = event.reader;
+        const samples = JSON.parse(event.samples);
+
+        // process each sample
+        for (const sample of samples) {
+            // get sample data (base64url-encoded)
+            // We passed `Fingerprint.SampleFormat.PngImage` to `startAcquisition`,
+            // so we receive a PNG image
+            const sampleData = Fingerprint.b64UrlToUtf8(sample);
+            // Convert sample data to an image (we used PNG format)
+            const image = "data:image/png;base64," + window.btoa();
+            ...
+        }
+    }
+}
+----
+|===
+
+In addition, using the Fingerprint API, you can:
+
+* Enumerate all fingerprint readers in the system using the `enumerateDevices` method,
+* Get readers' properties like `deviceId`, `name`, `type`, etc using the `getDeviceInfo` method.
+* Get fingerprint quality using the `onQualityReported` event handler.
+* Get fingerprint reader status using the `onDeviceConnected` and `onDeviceDisconnected` event handlers.
+* Get fingerprint acquisition status using the `onAcquisitionStarted` and `onAcquisitionStopped` event handlers.
+* Handle errors using the `onErrorOccurred` event handler.
+* Handle communication errors using the `onCommunicationFailed` event handler.
+

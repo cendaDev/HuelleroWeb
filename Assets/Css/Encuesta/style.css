@@ -1,0 +1,127 @@
+body {
+    font-family: 'Poppins', sans-serif;
+    background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+    color: #4b4b4b;
+    margin: 0;
+    padding: 0;
+}
+
+h2 {
+    color: #333;
+    font-weight: 700;
+    margin-bottom: 2rem;
+    text-align: center;
+    font-size: 2rem;
+    text-transform: uppercase;
+}
+
+.container {
+    background: #fff;
+    padding: 3rem;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+    max-width: 600px;
+    margin: 5rem auto;
+    transition: transform 0.3s ease;
+}
+
+.container:hover {
+    transform: translateY(-10px);
+}
+
+.form-group label {
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.form-control {
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.1);
+    padding: 10px;
+    font-size: 1rem;
+    margin-bottom: 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.form-control:focus {
+    border-color: #6c63ff;
+    box-shadow: 0px 0px 10px rgba(108, 99, 255, 0.5);
+}
+
+.btn {
+    border-radius: 50px;
+    padding: 15px 30px;
+    font-size: 1rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #6c63ff, #3a3ac9);
+    border: none;
+    color: #fff;
+    box-shadow: 0px 10px 20px rgba(108, 99, 255, 0.3);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #5751d4, #2b2b89);
+}
+
+.btn-circle {
+    border-radius: 50%;
+    padding: 20px;
+    width: 80px;
+    height: 80px;
+    margin: 0 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.btn-opcion img {
+    width: 50px;
+    transition: all 0.3s ease;
+}
+
+.btn-opcion:hover img {
+    transform: scale(1.1);
+}
+
+.btn-opcion:hover {
+    box-shadow: 0px 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.text-center label {
+    font-size: 1.2rem;
+    color: #666;
+    margin-top: 1.5rem;
+}
+
+#labelCalificacion {
+    font-weight: 600;
+    text-align: center;
+    margin-top: 1rem;
+    font-size: 1.2rem;
+}
+
+textarea {
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.1);
+    padding: 10px;
+    font-size: 1rem;
+    resize: none;
+    transition: all 0.3s ease;
+}
+
+textarea:focus {
+    border-color: #6c63ff;
+    box-shadow: 0px 0px 10px rgba(108, 99, 255, 0.5);
+}

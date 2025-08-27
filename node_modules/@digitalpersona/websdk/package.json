@@ -1,0 +1,40 @@
+{
+  "name": "@digitalpersona/websdk",
+  "globalObject": "WebSdk",
+  "version": "1.1.0",
+  "description": "HID DigitalPersona WebSDK library",
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "HID Global",
+  "license": "MIT",
+  "maintainers": [
+    {
+      "name": "Kirill Lozin",
+      "email": "kirill.lozin@hidglobal.com"
+    },
+    {
+      "name": "Andrey Bronnikov",
+      "email": "andrey.bronnikov@hidglobal.com"
+    }
+  ],
+  "keywords": [
+    "HID",
+    "DigitalPersona",
+    "authentication",
+    "identification",
+    "Lite Client",
+    "Authentication Device Client",
+    "ADC"
+  ],
+  "files": [
+    "dist/",
+    "dts/"
+  ],
+  "main": "./dist/websdk.client.ui.js",
+  "browser": "./dist/websdk.client.ui.js",
+  "types": "./dts/websdk.client.d.ts",
+  "scripts": {
+    "publish:pre": "npm publish --tag pre --access=restricted"
+  }
+}

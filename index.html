@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <title>Captura de Huella - DP 4500</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Guard inline: si NO hay token, redirige inmediatamente -->
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem("authToken");
+                if (!t) { window.location.replace("login.html"); }
+            } catch (e) {}
+        })();
+    </script>
+
+    <!-- Config primero (necesario para seguridad.js si usa config.getServiceUrl) -->
+    <script src="config.js"></script>
+
+    <!-- Seguridad: SIN defer para permitir redirección temprana -->
+    <script src="security/seguridad.js"></script>
+
+    <!-- Estilos -->
+    <link rel="stylesheet" href="style/style.css" />
+</head>
+<body>
+<noscript>
+    <div class="card" style="margin:16px; color:#fff; background:#7f1d1d; border-color:#7f1d1d">
+        Necesitas habilitar JavaScript para usar el sistema de registro por huella.
+    </div>
+</noscript>
+
+<h1>Control de Registro</h1>
+
+<div class="grid">
+    <!-- IZQUIERDA -->
+    <aside class="stack" aria-label="Panel de captura y estado">
+        <div class="card" aria-live="polite">
+            <div class="clock" id="clock">--:-- --</div>
+            <div class="date" id="date">--</div>
+        </div>
+
+        <div class="card">
+            <h3 style="margin-top:0">Última captura</h3>
+
+            <!-- Imagen de la huella (el estilo principal viene de style.css) -->
+            <img id="fp-img" alt="Imagen de huella" />
+
+            <div class="controls" style="margin-top:12px; width:100%;">
+                <input type="text" id="propietario" placeholder="Nombre de la persona" style="flex:1;" autocomplete="off" />
+                <input type="text" id="documento" placeholder="Documento (opcional)" style="width:180px;" autocomplete="off" inputmode="numeric" />
+            </div>
+
+            <div class="controls" style="margin-top:8px;">
+                <label class="muted" for="sede-actual">Sede:</label>
+                <select id="sede-actual" aria-label="Sede actual"></select>
+
+                <!-- Botón opcional de guardado manual (si lo usas en tu lógica) -->
+                <button id="btn-guardar" type="button" title="Guardar registro manual (sin esperar nueva muestra)">Guardar</button>
+            </div>
+
+            <!-- Estado usado por capture.js -->
+            <div id="match-status" class="muted" style="margin-top:10px;">Lector listo…</div>
+        </div>
+    </aside>
+
+    <!-- DERECHA -->
+    <main class="stack" aria-label="Registros">
+        <div class="card">
+            <div class="controls" style="justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                <h3 style="margin:0">Registros</h3>
+
+                <div class="controls" style="gap:12px; flex-wrap:wrap;">
+                    <button id="btn-enroll-open" type="button" title="Registrar nueva huella">Registrar huella</button>
+
+                    <label class="muted" for="filtro-sede">Filtrar sede:</label>
+                    <select id="filtro-sede" aria-label="Filtro por sede"></select>
+
+                    <!-- Activar/desactivar huellero -->
+                    <label class="muted"><input type="checkbox" id="chk-lector" checked /> Activar lector</label>
+
+                    <!-- Modo múltiple (no detener tras primer match) -->
+                    <label class="muted"><input type="checkbox" id="chk-multiple" checked /> Modo múltiple</label>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table class="table" id="tabla-registros">
+                    <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Documento</th>
+                        <th>Hora de entrada</th>
+                        <th>Sede</th>
+                    </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Ocultos (compatibilidad / otros flujos) -->
+<div id="log" class="hidden" aria-hidden="true"></div>
+<textarea id="fp-data" class="hidden" aria-hidden="true"></textarea>
+<div class="hidden" aria-hidden="true">
+    <button id="btn-stop" type="button">Detener</button>
+    <label class="muted"><input type="checkbox" id="chk-template" /> Capturar template</label>
+    <div id="status" class="muted">Lector: <em>desconocido</em></div>
+    <img id="fp-img-right" alt="Imagen de huella (oculta)" />
+</div>
+
+<!-- ========== MODAL REGISTRO DE HUELLA ========== -->
+<div id="modal-enroll" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-enroll-title">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 id="modal-enroll-title" style="margin:0">Registrar huella</h3>
+            <button id="mdl-close" class="btn-ghost" type="button" aria-label="Cerrar">×</button>
+        </div>
+
+        <div class="modal-body">
+            <div class="section">
+                <h4>1) Buscar persona por documento</h4>
+                <div class="controls">
+                    <input type="text" id="mdl-doc" placeholder="Documento" style="flex:1;" autocomplete="off" inputmode="numeric" />
+                    <button id="mdl-buscar" type="button">Buscar</button>
+                </div>
+                <div id="mdl-persona" class="persona-box muted">Sin persona cargada.</div>
+            </div>
+
+            <div class="section">
+                <h4>2) Capturar templates</h4>
+                <div class="enroll-grid">
+                    <div class="enroll-col">
+                        <div class="enroll-head">
+                            <strong>Huella 1</strong>
+                            <span id="state-h1" class="pill pill-warn">Pendiente</span>
+                        </div>
+
+                        <div class="controls">
+                            <!-- Dedo para Huella 1 -->
+                            <select id="finger-h1" title="Dedo para Huella 1" disabled></select>
+                        </div>
+
+                        <div class="controls">
+                            <button id="mdl-cap1" type="button" disabled>Capturar Huella 1</button>
+                            <button id="mdl-clr1" type="button" class="secondary" disabled>Borrar</button>
+                        </div>
+
+                        <div class="muted small">
+                            Progreso: <span id="prog-h1">0/3</span> —
+                            Tamaño mejor muestra: <span id="size-h1">—</span>
+                        </div>
+                    </div>
+
+                    <div class="enroll-col">
+                        <div class="enroll-head">
+                            <strong>Huella 2</strong>
+                            <span id="state-h2" class="pill pill-warn">Pendiente</span>
+                        </div>
+
+                        <div class="controls">
+                            <!-- Dedo para Huella 2 -->
+                            <select id="finger-h2" title="Dedo para Huella 2" disabled></select>
+                        </div>
+
+                        <div class="controls">
+                            <button id="mdl-cap2" type="button" disabled>Capturar Huella 2</button>
+                            <button id="mdl-clr2" type="button" class="secondary" disabled>Borrar</button>
+                        </div>
+
+                        <div class="muted small">
+                            Progreso: <span id="prog-h2">0/3</span> —
+                            Tamaño mejor muestra: <span id="size-h2">—</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="muted small">
+                    Se guardan como <em>template</em> (no imagen). Captura varias veces con ligeros cambios de presión/ángulo.
+                </div>
+            </div>
+
+            <div class="section">
+                <h4>3) Guardar en base de datos</h4>
+                <div class="controls">
+                    <button id="mdl-guardar" type="button" disabled>Guardar en BD</button>
+                    <button id="mdl-cancel" type="button" class="secondary">Cancelar</button>
+                </div>
+                <div id="mdl-msg" class="muted small" aria-live="polite">—</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SDKs DigitalPersona (respeta tu ruta real) -->
+<script src="lib/websdk.client.ui.min.js"></script>
+<script src="digitalpersona/fingerprint.sdk.min.js"></script>
+
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<!-- Módulos de tu app (respeta rutas si cambian) -->
+<script src="js/registrar.js" defer></script>
+<script src="js/registros.js" defer></script>
+<script src="js/huellas-enroll.js" defer></script>
+
+<!-- Captura / match (debe cargar al final para tener Fingerprint y Swal listos) -->
+<script src="js/capture.js"></script>
+
+<!-- Reloj en vivo -->
+<script>
+    (function(){
+        const clk = document.getElementById('clock');
+        const dte = document.getElementById('date');
+        function tick(){
+            const d = new Date();
+            if (clk) clk.textContent = d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+            if (dte) dte.textContent = d.toLocaleDateString('es-CO', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+        }
+        tick(); setInterval(tick, 1000);
+    })();
+</script>
+</body>
+</html>
