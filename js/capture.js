@@ -326,6 +326,15 @@ async function marcarAutoSimple(documento, sedeId, fechaOpt, horaSalidaTurnoOpt,
 }
 
 // ----------------------------
+// 🔄 Señal de refresco de tabla
+// ----------------------------
+function refreshRegistros(payload) {
+    try { window.Registros?.notifyNuevoRegistro?.(payload || null); } catch {}
+    try { window.dispatchEvent(new CustomEvent('registros:nuevo', { detail: payload || null })); } catch {}
+    try { localStorage.setItem('last_mark_ping', String(Date.now())); } catch {}
+}
+
+// ----------------------------
 // Llamadas a API (match)
 // ----------------------------
 async function postMatch(url, dataUrlPng) {
@@ -533,6 +542,9 @@ function paintPunctualityStatus(statusEl, fLite) {
                     const d = resMark.data || {};
                     const accion = d.accion;
 
+                    // 🔄 Refrescar tabla YA (entrada o salida)
+                    refreshRegistros(d);
+
                     if (accion === "SALIDA") {
                         // Preferir bandera del backend; si no viene, calculamos local
                         const fueraRangoSalida = (typeof d.salida_fuera_rango === "boolean")
@@ -588,7 +600,9 @@ function paintPunctualityStatus(statusEl, fLite) {
                         statusEl.textContent = (statusEl.textContent || "Marcación OK") + ` — ${d.accion}`;
                     }
                 } else {
+                    // ❗ También refrescamos ante 409 para sincronizar la vista
                     if (resMark.status === 409) {
+                        refreshRegistros(null);
                         showAlertCentered({ title: resMark.msg || "El registro de hoy ya está cerrado.", icon: "warning", timer: 2600 });
                     } else {
                         showAlertCentered({ title: resMark.msg || "No se pudo registrar", icon: "error", timer: 2600 });

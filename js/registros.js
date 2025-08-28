@@ -86,15 +86,13 @@
     const hasCustomSedes = () =>
         !!Array.from(filtroSede?.options || []).find((o) => o.value && o.value.trim() !== '');
 
-    const mergeSedesIntoFiltro = (extraNames) => {
-        if (!filtroSede) return;
-        const set = new Set(
-            Array.from(filtroSede.options)
-                .map((o) => o.value)
-                .filter((v) => v && v.trim() !== '')
-        );
-        extraNames.forEach((n) => set.add(n));
-        setFiltroSedeOptions(Array.from(set).sort((a, b) => a.localeCompare(b, 'es')));
+    const sedesFromRows = (rows) => {
+        const set = new Set();
+        (rows || []).forEach((r) => {
+            const s = r?.sede ?? r?.sedeNombre ?? r?.sede_emp ?? '';
+            if (s) set.add(String(s).trim());
+        });
+        return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
     };
 
     // === Tabla ===
@@ -116,22 +114,13 @@
         for (const r of rows) {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-        <td>${r.nombre ?? '(Sin nombre)'}</td>
-        <td>${r.documento ?? ''}</td>
-        <td>${r.horaEntrada ?? r.hora_entrada ?? ''}</td>
-        <td>${r.sede ?? r.sedeNombre ?? r.sede_emp ?? ''}</td>
-      `;
+                <td>${r.nombre ?? '(Sin nombre)'}</td>
+                <td>${r.documento ?? ''}</td>
+                <td>${r.horaEntrada ?? r.hora_entrada ?? ''}</td>
+                <td>${r.sede ?? r.sedeNombre ?? r.sede_emp ?? ''}</td>
+            `;
             tbody.appendChild(tr);
         }
-    };
-
-    const sedesFromRows = (rows) => {
-        const set = new Set();
-        (rows || []).forEach((r) => {
-            const s = r?.sede ?? r?.sedeNombre ?? r?.sede_emp ?? '';
-            if (s) set.add(String(s).trim());
-        });
-        return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
     };
 
     const cargarTabla = async () => {
@@ -144,7 +133,6 @@
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json(); // [{documento, nombre, horaEntrada, sede}, ...]
-
             renderTable(data);
 
             // Fallback de sedes: si el select no tiene opciones reales, las tomamos de los registros
@@ -170,16 +158,46 @@
         // 3) Reaccionar a cambios de sede (consulta al servidor con ?sede=)
         filtroSede?.addEventListener('change', cargarTabla);
 
-        // 4) Refresco automático
-        setInterval(cargarTabla, 60_000);
+        // 4) ❌ SIN setInterval: sólo refresca cuando avises un nuevo registro
+        //    (ver notifyNuevoRegistro más abajo)
     });
 
-    // Exponer por si necesitas recargar manualmente
-    window.Registros = { reload: cargarTabla };
+    // === Canal de notificación (3 maneras) ===
+    // A) Evento custom 'registros:nuevo'
+    window.addEventListener('registros:nuevo', () => cargarTabla());
+
+    // B) Ping por localStorage (sirve entre pestañas/ventanas)
+    window.addEventListener('storage', (ev) => {
+        if (ev.key === 'last_mark_ping' && ev.newValue) {
+            cargarTabla();
+        }
+    });
+
+    // C) API pública
+    window.Registros = {
+        reload: cargarTabla,
+        /**
+         * Llama esto tras marcar (entrada/salida) para refrescar la tabla.
+         * Ejemplo en capture.js justo después de un POST exitoso:
+         *   window.Registros?.notifyNuevoRegistro(d);
+         */
+        notifyNuevoRegistro: (detalle) => {
+            try {
+                // Evento custom local
+                window.dispatchEvent(new CustomEvent('registros:nuevo', { detail: detalle || null }));
+                // Ping cross-tab
+                localStorage.setItem('last_mark_ping', String(Date.now()));
+                // Refresco inmediato en esta pestaña
+                cargarTabla();
+            } catch {
+                cargarTabla();
+            }
+        }
+    };
 })();
 
 
-// Actualiza reloj (12h con AM/PM) y fecha en español
+// ==== Reloj (sin cambios) ====
 function updateClock() {
     const now = new Date();
 
@@ -204,6 +222,5 @@ function updateClock() {
     if (dateEl)  dateEl.textContent  = fecha[0].toUpperCase() + fecha.slice(1); // Capitaliza el día
 }
 
-// Primera ejecución inmediata y luego cada segundo
 updateClock();
 setInterval(updateClock, 1000);
