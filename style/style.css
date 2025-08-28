@@ -13,7 +13,7 @@
     font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
 }
 
-/* Layout base */
+/* ------ Layout base ------ */
 html,body{height:100%}
 body{
     margin:24px;
@@ -41,7 +41,7 @@ h1{
 
 .card{
     background:
-            linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)) ,
+            linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)),
             var(--card);
     border:1px solid var(--border);
     border-radius:16px;
@@ -61,12 +61,14 @@ h1{
 
 .controls{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 
+/* ------ Inputs / Selects / Botones ------ */
 input[type="text"], select, button{
     height: 38px;
     border-radius:10px;
     border:1px solid var(--border);
     outline: none;
 }
+
 input[type="text"], select{
     padding:8px 10px;
     background: #0b1220;
@@ -74,6 +76,13 @@ input[type="text"], select{
     box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
 }
 input::placeholder{ color:#6b7280; }
+
+/* No ocupar todo el ancho en paneles; dejar aire */
+.controls > input[type="text"],
+.controls > select{
+    flex: 1 1 280px;
+    max-width: 520px;
+}
 
 select{
     appearance:none;
@@ -119,6 +128,7 @@ button.secondary{
 }
 .btn-ghost:hover{ background: rgba(255,255,255,.06); color: #fff; }
 
+/* ------ Tabla ------ */
 .table{ width:100%; border-collapse: collapse; font-size: .95rem; }
 .table thead th{
     position: sticky; top:0; z-index:1;
@@ -174,7 +184,7 @@ button.secondary{
     body{ margin:16px; }
 }
 
-/* ========== MODAL ========== */
+/* ------ Modal base ------ */
 .modal-backdrop{
     position: fixed; inset:0; display:none; place-items:center;
     background: rgba(0,0,0,.6); z-index: 50;
@@ -221,7 +231,7 @@ button.secondary{
 .pill-warn{ color:#f59e0b; border-color:#7c2d12; }
 .pill-err{ color:#ef4444; border-color:#7f1d1d; }
 
-/* ===== SweetAlert2 tema oscuro con tus variables ===== */
+/* ------ SweetAlert2: tema oscuro + márgenes laterales en inputs ------ */
 .swal2-container{ backdrop-filter: blur(2px); }
 .swal2-popup{
     background: var(--surface) !important;
@@ -235,6 +245,8 @@ button.secondary{
     letter-spacing: .2px;
 }
 .swal2-html-container{ color: var(--text) !important; }
+
+/* Botones */
 .swal2-confirm{
     background: linear-gradient(180deg, var(--accent), #18b6d0) !important;
     color: #001015 !important;
@@ -247,9 +259,39 @@ button.secondary{
     color: #dbeafe !important;
 }
 .swal2-styled:focus{ box-shadow: 0 0 0 4px var(--ring) !important; }
-.swal2-input, .swal2-textarea, .swal2-select{
+
+/* Campos del modal con aire lateral (IMPORTANT para vencer estilos internos) */
+.swal2-popup #motivo-select,
+.swal2-popup #anotacion-input,
+.swal2-popup .swal2-input,
+.swal2-popup .swal2-textarea,
+.swal2-popup .swal2-select{
+    width: calc(100% - 32px) !important;  /* no ocupa el 100% */
+    margin-inline: 16px !important;       /* margen lateral */
     background: #0b1220 !important;
     color: var(--text) !important;
     border:1px solid var(--border) !important;
     border-radius:10px !important;
+}
+
+/* Labels del modal alineados con inputs */
+.swal2-popup .swal2-html-container label{
+    margin-inline: 16px !important;
+    display:block;
+    color: var(--text);
+    font-weight:600;
+}
+
+/* Contenido del modal con padding suave y sin scroll horizontal feo */
+.swal2-html-container{
+    padding-inline: 6px !important;
+    overflow-x: hidden !important;
+}
+
+/* Contador de caracteres */
+#anotacion-count{
+    margin: 4px 16px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: right;
 }

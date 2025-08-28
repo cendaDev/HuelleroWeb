@@ -1,9 +1,77 @@
 // ============================
-// capture.js (completo)
+// capture.js (completo y corregido)
 // ============================
 
+// ---------------------------------------------------------
+// Bloque 0) Helpers GLOBALES de huella (definidos en window)
+//    - Evita "getPngBase64FromEvent is not defined"
+//    - Solo se registran una vez por bandera __fpHelpersLoaded__
+// ---------------------------------------------------------
+(function () {
+    if (window.__fpHelpersLoaded__) return;
+    window.__fpHelpersLoaded__ = true;
+
+    // Extrae base64 PNG desde el evento del SDK (Samples)
+    window.getPngBase64FromEvent = function (samplesValue) {
+        let parsed;
+        try {
+            parsed = (typeof samplesValue === "string") ? JSON.parse(samplesValue) : samplesValue;
+        } catch {
+            parsed = samplesValue;
+        }
+        const arr = (parsed && (parsed.Samples || parsed.samples)) || (Array.isArray(parsed) ? parsed : null);
+        const first = Array.isArray(arr) ? arr[0] : parsed;
+
+        const data = first && (first.Data ?? first.data);
+        const fmt  = (first && (first.Format || first.format || first.DataType || first.dataType) || "").toString();
+
+        if (!data && typeof first !== "string") throw new Error("No se encontró base64 en el sample.");
+        const raw = data || (typeof first === "string" ? first : "");
+
+        if (fmt && !/png/i.test(fmt)) throw new Error(`El SDK no entregó PNG (formato reportado: ${fmt}). Inicia con PngImage.`);
+
+        let b64 = raw.replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, "");
+        const pad = (4 - (b64.length % 4)) % 4;
+        if (pad) b64 += "=".repeat(pad);
+
+        if (!b64.startsWith("iVBORw0KGgo")) throw new Error("El sample no parece ser un PNG (firma base64 inválida).");
+        return b64;
+    };
+
+    // Construye data URL desde base64 PNG
+    window.toPngDataUrlFromB64 = function (b64) {
+        return "data:image/png;base64," + b64;
+    };
+
+    // Renderiza la huella en #fp-img (crea el <img> si no existe)
+    window.renderFingerprint = async function (dataUrl) {
+        let img = document.getElementById("fp-img");
+        if (!img) {
+            img = document.createElement("img");
+            img.id = "fp-img";
+            img.alt = "Huella";
+            img.style.maxWidth = "240px";
+            img.style.display = "block";
+            img.style.marginTop = "8px";
+            img.style.borderRadius = "8px";
+            document.body.appendChild(img);
+        }
+        if (!dataUrl) throw new Error("DataURL vacío");
+        try {
+            const resp = await fetch(dataUrl);
+            if (!resp.ok) throw new Error("DataURL inválida");
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            img.onload = () => URL.revokeObjectURL(url);
+            img.src = url;
+        } catch {
+            img.src = dataUrl; // fallback
+        }
+    };
+})();
+
 // ----------------------------
-// Utils: normalización y render
+// Utils: normalización y render (resto)
 // ----------------------------
 function ensureStatusEl() {
     let el = document.getElementById("match-status");
@@ -16,21 +84,6 @@ function ensureStatusEl() {
         document.body.appendChild(el);
     }
     return el;
-}
-
-function ensurePreviewImg() {
-    let img = document.getElementById("fp-img");
-    if (!img) {
-        img = document.createElement("img");
-        img.id = "fp-img";
-        img.alt = "Huella";
-        img.style.maxWidth = "240px";
-        img.style.display = "block";
-        img.style.marginTop = "8px";
-        img.style.borderRadius = "8px";
-        document.body.appendChild(img);
-    }
-    return img;
 }
 
 // --- Alertas (SweetAlert2 centradas o fallback nativo) ---
@@ -48,13 +101,8 @@ function showAlertCentered({ title, text = "", icon = "info", timer = 2200 }) {
     }
     alert(`${title}${text ? `\n${text}` : ""}`);
 }
-
-function showNotDetectedAlert() {
-    showAlertCentered({ title: "Huella no detectada", icon: "warning" });
-}
-function showErrorAlert(msg) {
-    showAlertCentered({ title: "Error", text: msg || "Ocurrió un error", icon: "error", timer: 3000 });
-}
+function showNotDetectedAlert() { showAlertCentered({ title: "Huella no detectada", icon: "warning" }); }
+function showErrorAlert(msg)   { showAlertCentered({ title: "Error", text: msg || "Ocurrió un error", icon: "error", timer: 3000 }); }
 
 // === Helpers de hora ===
 function pad2(n){ return String(n).padStart(2,'0'); }
@@ -74,167 +122,14 @@ function parseHHMMSS(hhmmss){
     if (Number.isNaN(h) || Number.isNaN(m)) return null;
     return (h*60) + m; // minutos desde 00:00
 }
-/**
- * Devuelve true si la hora actual está fuera del rango alrededor de la hora de salida del turno.
- * toleranceMin: margen en minutos (p.ej. 10 = permite ±10 min)
- */
+/** Devuelve true si la hora actual está fuera del rango alrededor de la hora de salida del turno. */
 function isSalidaFueraDeRango(info, toleranceMin = 10){
     const hs = info && (info.horaSalida || info.hora_salida || info.horasalida);
     const hsMin = parseHHMMSS(hs);
     if (hsMin == null) return false; // si no tenemos hora de salida de turno, no evaluamos
-
     const now = new Date();
     const nowMin = now.getHours()*60 + now.getMinutes();
     return (nowMin < (hsMin - toleranceMin)) || (nowMin > (hsMin + toleranceMin));
-}
-
-// ============================
-// ⚠️ Helpers de huella (EXPUESOS)
-// ============================
-function getPngBase64FromEvent(samplesValue) {
-    let parsed;
-    try {
-        parsed = (typeof samplesValue === "string") ? JSON.parse(samplesValue) : samplesValue;
-    } catch {
-        parsed = samplesValue;
-    }
-    const arr = (parsed && (parsed.Samples || parsed.samples)) || (Array.isArray(parsed) ? parsed : null);
-    const first = Array.isArray(arr) ? arr[0] : parsed;
-
-    const data = first && (first.Data ?? first.data);
-    const fmt  = (first && (first.Format || first.format || first.DataType || first.dataType) || "").toString();
-
-    if (!data && typeof first !== "string") throw new Error("No se encontró base64 en el sample.");
-    const raw = data || (typeof first === "string" ? first : "");
-
-    if (fmt && !/png/i.test(fmt)) throw new Error(`El SDK no entregó PNG (formato reportado: ${fmt}). Inicia con PngImage.`);
-
-    let b64 = raw.replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, "");
-    const pad = (4 - (b64.length % 4)) % 4;
-    if (pad) b64 += "=".repeat(pad);
-
-    if (!b64.startsWith("iVBORw0KGgo")) throw new Error("El sample no parece ser un PNG (firma base64 inválida).");
-    return b64;
-}
-function toPngDataUrlFromB64(b64) {
-    return "data:image/png;base64," + b64;
-}
-async function renderFingerprint(dataUrl) {
-    const img = ensurePreviewImg();
-    if (!dataUrl) throw new Error("DataURL vacío");
-    try {
-        const resp = await fetch(dataUrl);
-        if (!resp.ok) throw new Error("DataURL inválida");
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        img.onload = () => URL.revokeObjectURL(url);
-        img.src = url;
-    } catch {
-        img.src = dataUrl; // fallback
-    }
-}
-window.getPngBase64FromEvent = getPngBase64FromEvent;
-window.toPngDataUrlFromB64 = toPngDataUrlFromB64;
-window.renderFingerprint = renderFingerprint;
-
-// ============================
-/** Motivos de fuera de rango (select) */
-const MOTIVOS_TARDE = [
-    "Llegué más temprano",
-    "Mucho tráfico / trancón",
-    "Personal nuevo",
-    "Permiso del Doctor",
-    "Olvidé registrar entrada / salida",
-    "Calibración/Verificación/Revisión/Mantenimiento de equipos",
-    "Cambio de turno",
-    "Cubriendo turno",
-    "Fallas con mi vehículo (carro / moto)",
-    "Asesor comercial",
-    "Problemas con el transporte público",
-    "Diligencias personales autorizadas"
-];
-
-// Swal de estado
-function showMatchAlert(nombre, doc, info) {
-    const estado  = (info && info.estado) || null;
-    const mensaje = (info && info.mensaje) || "";
-    const hi = info && (info.horaIngreso || info.hora_ingreso || info.horaentrada);
-    const hs = info && (info.horaSalida  || info.hora_salida  || info.horasalida);
-    const minTarde = info && info.minutosTarde;
-
-    const registro = nowHHmmss();
-    let title = "Coincidencia", icon = "info", timer = 2600;
-
-    if (estado === "A_TIEMPO") { title = "Ingreso a tiempo"; icon = "success"; }
-    else if (estado === "TARDE") { title = "Llegó tarde"; icon = "error"; timer = 4200; }
-    else if (estado === "ANTES_DEL_TURNO") { title = "Antes del turno"; icon = "info"; }
-    else if (estado === "FUERA_DE_TURNO") { title = "Fuera de turno"; icon = "warning"; }
-
-    const lineaPersona = [nombre, doc ? `(${doc})` : ""].filter(Boolean).join(" ");
-    const html = `
-        <div style="text-align:left">
-          <div><strong>${lineaPersona || "—"}</strong></div>
-          <div>Hora registrada: <strong>${registro}</strong></div>
-          ${(hi || hs) ? `<div>Turno: <strong>${hi || "--"} — ${hs || "--"}</strong></div>` : ""}
-          ${(estado === "TARDE" && Number.isFinite(minTarde)) ? `<div>Retraso: <strong>${minTarde} min</strong></div>` : ""}
-          ${mensaje ? `<div class="muted">${mensaje}</div>` : ""}
-        </div>`;
-    if (window.Swal && typeof Swal.fire === "function") {
-        Swal.fire({ icon, title, html, position: "center", timer, showConfirmButton: false, backdrop: true });
-    } else {
-        let txt = `${title}\n${lineaPersona}\nHora registrada: ${registro}`;
-        if (hi || hs) txt += `\nTurno: ${hi || "--"} — ${hs || "--"}`;
-        if (estado === "TARDE" && Number.isFinite(minTarde)) txt += `\nRetraso: ${minTarde} min`;
-        if (mensaje) txt += `\n${mensaje}`;
-        alert(txt);
-    }
-}
-
-// Pide motivo/anotación si está fuera de rango
-async function promptMotivoFueraDeRango(nombre, doc, info) {
-    const hi = info && (info.horaIngreso || info.hora_ingreso || info.horaentrada);
-    const hs = info && (info.horaSalida  || info.hora_salida  || info.horasalida);
-    const lineaPersona = [nombre, doc ? `(${doc})` : ""].filter(Boolean).join(" ");
-
-    if (window.Swal && typeof Swal.fire === "function") {
-        const options = MOTIVOS_TARDE.map(m => `<option value="${m}">${m}</option>`).join("");
-        const html = `
-          <div style="text-align:left">
-            <div><strong>${lineaPersona || "—"}</strong></div>
-            ${(hi || hs) ? `<div class="text-sm">Turno: <strong>${hi || "--"} — ${hs || "--"}</strong></div>` : ""}
-            <label style="display:block;margin-top:10px;">Motivo</label>
-            <select id="motivo-select" class="swal2-input" style="width:100%;box-sizing:border-box;">
-              ${options}
-            </select>
-            <label style="display:block;margin-top:10px;">Anotación (opcional)</label>
-            <textarea id="anotacion-input" class="swal2-textarea" placeholder="Detalle adicional..." rows="3"></textarea>
-          </div>
-        `;
-        const result = await Swal.fire({
-            icon: "question",
-            title: "Registrar fuera de rango",
-            html,
-            showCancelButton: true,
-            confirmButtonText: "Guardar",
-            cancelButtonText: "Omitir",
-            focusConfirm: false,
-            preConfirm: () => {
-                const motivo = document.getElementById("motivo-select")?.value || "";
-                const anotacion = document.getElementById("anotacion-input")?.value || "";
-                if (!motivo) {
-                    Swal.showValidationMessage("Selecciona un motivo.");
-                    return false;
-                }
-                return { motivo, anotacion };
-            }
-        });
-        return (result.isConfirmed && result.value) ? result.value : null;
-    } else {
-        const motivo = prompt(`Motivo para ${lineaPersona}\n(Deja en blanco para cancelar):\n- ${MOTIVOS_TARDE.join("\n- ")}`, MOTIVOS_TARDE[0]);
-        if (!motivo) return null;
-        const anotacion = prompt("Anotación (opcional):", "") || "";
-        return { motivo, anotacion };
-    }
 }
 
 // --------- API base ---------
@@ -268,18 +163,35 @@ async function postJson(url, payload) {
     }
     return { ok:true, status:resp.status, data };
 }
+async function getJson(url) {
+    const headers = { ...authHeader() };
+    try {
+        const resp = await fetch(url, { method: "GET", headers });
+        const text = await resp.text().catch(() => "");
+        let data = null;
+        try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+        return { ok: resp.ok, status: resp.status, data };
+    } catch {
+        return { ok: false, status: 0, data: null };
+    }
+}
 
-// --------- API Anotaciones ---------
+// --------- API Anotaciones (OBLIGATORIAS cuando se exige) ---------
 async function guardarAnotacion(documento, motivo, anotacion, fecha, hora) {
     const base = getBaseUrl();
     const body = {
-        anotacion: (anotacion || "").trim() || `Motivo seleccionado: ${motivo}`,
+        anotacion: (anotacion || "").trim(),
         fecha: fecha || todayYYYYMMDD(),
         hora:  hora  || nowHHmmss(),
         motivo: (motivo || "").trim(),
         documentofuncionario: documento
     };
-    if (!body.motivo) return { ok:false, status:400, msg:"Selecciona un motivo" };
+
+    // Validaciones obligatorias
+    if (!body.motivo)   return { ok:false, status:400, msg:"Selecciona un motivo" };
+    if (!body.anotacion || body.anotacion.trim().length < 3) {
+        return { ok:false, status:400, msg:"El detalle adicional es obligatorio (mín. 3 caracteres)" };
+    }
 
     const candidates = [
         `${base}/api/v1/funcionario/${encodeURIComponent(documento)}/anotaciones`,
@@ -301,6 +213,14 @@ function getSelectedSedeId() {
     const sel = document.getElementById("sede-actual");
     const v = sel && sel.value;
     return (v !== undefined && v !== null && String(v).trim() !== "") ? v : null;
+}
+/** Consulta si habrá SALIDA (registro abierto) o ENTRADA (no abierto) */
+async function hayRegistroAbiertoHoy(documento) {
+    const base = getBaseUrl();
+    const url  = `${base}/api/v1/control-registros/abierto-hoy?documento=${encodeURIComponent(documento)}`;
+    const res = await getJson(url);
+    if (!res.ok) return false;
+    return !!(res.data && res.data.existe);
 }
 
 /**
@@ -339,14 +259,9 @@ function refreshRegistros(payload) {
 // ----------------------------
 async function postMatch(url, dataUrlPng) {
     const headers = { "Content-Type": "application/json", ...authHeader() };
-
     let resp;
     try {
-        resp = await fetch(url, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({ huella: dataUrlPng })
-        });
+        resp = await fetch(url, { method: "POST", headers, body: JSON.stringify({ huella: dataUrlPng }) });
     } catch (e) {
         return { ok: false, networkError: true, error: e };
     }
@@ -455,7 +370,125 @@ function paintPunctualityStatus(statusEl, fLite) {
 }
 
 // ----------------------------
-/* Captura con DigitalPersona */
+// Modal: Motivo + Detalle (ambos OBLIGATORIOS cuando se exige)
+// - El textarea se AUTORRELLENA con el motivo seleccionado y se actualiza
+//   si el usuario aún no ha escrito texto propio.
+// ----------------------------
+async function promptMotivoObligatorio(nombre, doc, info) {
+    const hi = info && (info.horaIngreso || info.hora_ingreso || info.horaentrada);
+    const hs = info && (info.horaSalida  || info.hora_salida  || info.horasalida);
+    const lineaPersona = [nombre, doc ? `(${doc})` : ""].filter(Boolean).join(" ");
+
+    const motivos = [
+        "Llegué más temprano",
+        "Mucho tráfico / trancón",
+        "Personal nuevo",
+        "Permiso del Doctor",
+        "Olvidé registrar entrada / salida",
+        "Calibración/Verificación/Revisión/Mantenimiento de equipos",
+        "Cambio de turno",
+        "Cubriendo turno",
+        "Fallas con mi vehículo (carro / moto)",
+        "Asesor comercial",
+        "Problemas con el transporte público",
+        "Diligencias personales autorizadas"
+    ];
+
+    const options = motivos.map(m => `<option value="${m}">${m}</option>`).join("");
+
+    const html = `
+    <div style="text-align:left">
+      <div><strong>${lineaPersona || "—"}</strong></div>
+      ${(hi || hs) ? `<div class="text-sm">Turno: <strong>${hi || "--"} — ${hs || "--"}</strong></div>` : ""}
+      <label style="display:block;margin-top:12px;font-weight:600;">Motivo (obligatorio)</label>
+      <select id="motivo-select" class="swal2-input" style="width:100%;box-sizing:border-box;">
+        ${options}
+      </select>
+      <label style="display:block;margin-top:12px;font-weight:600;">Detalle adicional (obligatorio)</label>
+      <textarea id="anotacion-input"
+                class="swal2-textarea"
+                rows="5"
+                maxlength="300"
+                placeholder="Puedes añadir un detalle adicional…"
+                style="width:100%;box-sizing:border-box;min-height:110px;resize:vertical;border-radius:10px;"></textarea>
+      <div id="anotacion-count" class="muted" style="text-align:right;font-size:12px;margin-top:4px;">0 / 300</div>
+    </div>
+  `;
+
+    if (window.Swal && typeof Swal.fire === "function") {
+        const result = await Swal.fire({
+            icon: "question",
+            title: "Registro fuera de rango",
+            html,
+            showCancelButton: true,
+            confirmButtonText: "Continuar",
+            cancelButtonText: "Cancelar",
+            focusConfirm: false,
+            didOpen: (el) => {
+                const sel = el.querySelector("#motivo-select");
+                const ta  = el.querySelector("#anotacion-input");
+                const ct  = el.querySelector("#anotacion-count");
+
+                // Sincroniza contador
+                const syncCount = () => { if (ct) ct.textContent = `${ta.value.length} / 300`; };
+
+                // Marca que el textarea está "autorrelleno" mientras el usuario no escriba algo distinto
+                const applyFromSelect = (force = false) => {
+                    const m = (sel.value || "").trim();
+                    if (!ta) return;
+                    if (force || ta.value.trim() === "" || ta.dataset.autofill === "1") {
+                        ta.value = m ? (m + " ") : "";
+                        ta.dataset.autofill = "1";
+                        syncCount();
+                    }
+                };
+
+                // Primer autorrelleno con el motivo inicial
+                applyFromSelect(true);
+
+                // Si el usuario cambia de motivo y aún no ha escrito "texto propio", actualizamos
+                sel.addEventListener("change", () => applyFromSelect(false));
+
+                // En cuanto el usuario escriba algo distinto al motivo, desactivamos el auto-relleno
+                ta.addEventListener("input", () => {
+                    const currentMotivo = (sel.value || "").trim();
+                    const raw = ta.value.trim();
+                    // Si el contenido se aleja del motivo inicial, considerar como texto propio
+                    if (raw !== currentMotivo && raw !== (currentMotivo + "")) {
+                        ta.dataset.autofill = (raw.length ? "0" : "1");
+                    }
+                    syncCount();
+                });
+
+                syncCount();
+            },
+            preConfirm: () => {
+                const motivo = document.getElementById("motivo-select")?.value || "";
+                const anotacion = (document.getElementById("anotacion-input")?.value || "").trim();
+                if (!motivo) {
+                    Swal.showValidationMessage("Selecciona un motivo.");
+                    return false;
+                }
+                if (!anotacion || anotacion.length < 3) {
+                    Swal.showValidationMessage("El detalle adicional es obligatorio (mín. 3 caracteres).");
+                    return false;
+                }
+                return { motivo, anotacion };
+            }
+        });
+        return (result.isConfirmed && result.value) ? result.value : null;
+    }
+
+    // Fallback simple sin SweetAlert
+    const motivo = prompt(`Motivo para ${lineaPersona} (obligatorio):`, motivos[0]);
+    if (!motivo) return null;
+    const anotacion = (prompt("Detalle adicional (obligatorio):", motivo + " ") || "").trim();
+    if (!anotacion) return null;
+    return { motivo, anotacion };
+}
+
+// ----------------------------
+// Captura con DigitalPersona
 // ----------------------------
 (function () {
     const statusEl = ensureStatusEl();
@@ -484,12 +517,12 @@ function paintPunctualityStatus(statusEl, fLite) {
         statusEl.style.color = "";
 
         try {
-            // 1) Extrae y valida PNG
-            const b64 = window.getPngBase64FromEvent ? window.getPngBase64FromEvent(evt.samples) : getPngBase64FromEvent(evt.samples);
-            const dataUrl = toPngDataUrlFromB64(b64);
+            // 1) Extrae y valida PNG (siempre usando window.*)
+            const b64 = window.getPngBase64FromEvent(evt.samples);
+            const dataUrl = window.toPngDataUrlFromB64(b64);
 
             // 2) Previsualizar
-            await renderFingerprint(dataUrl);
+            await window.renderFingerprint(dataUrl);
 
             // 3) Consultar API de match
             const res = await matchHuellaEnApi(dataUrl);
@@ -503,7 +536,24 @@ function paintPunctualityStatus(statusEl, fLite) {
                 const isSameAsLast   = lastMatchDoc && String(lastMatchDoc) === String(doc);
                 const withinCooldown = (now - lastMatchAt) < MATCH_COOLDOWN_MS;
                 if (!(isSameAsLast && withinCooldown)) {
-                    showMatchAlert(nombre, doc, fLite);
+                    // Toast de match (sin bloquear)
+                    const estadoToast  = fLite && fLite.estado;
+                    const mensaje = fLite && fLite.mensaje;
+                    const hi = fLite && (fLite.horaIngreso || fLite.hora_ingreso || fLite.horaentrada);
+                    const hs = fLite && (fLite.horaSalida  || fLite.hora_salida  || fLite.horasalida);
+                    const minTarde = fLite && fLite.minutosTarde;
+                    const registro = nowHHmmss();
+                    if (window.Swal && typeof Swal.fire === "function") {
+                        const html = `
+              <div style="text-align:left">
+                <div><strong>${[nombre, doc ? `(${doc})` : ""].filter(Boolean).join(" ") || "—"}</strong></div>
+                <div>Hora registrada: <strong>${registro}</strong></div>
+                ${(hi || hs) ? `<div>Turno: <strong>${hi || "--"} — ${hs || "--"}</strong></div>` : ""}
+                ${(estadoToast === "TARDE" && Number.isFinite(minTarde)) ? `<div>Retraso: <strong>${minTarde} min</strong></div>` : ""}
+                ${mensaje ? `<div class="muted">${mensaje}</div>` : ""}
+              </div>`;
+                        Swal.fire({ icon:"info", title:"Coincidencia", html, position:"center", timer:2200, showConfirmButton:false, backdrop:true });
+                    }
                     lastMatchDoc = doc || "(desconocido)";
                     lastMatchAt = now;
                 }
@@ -523,20 +573,40 @@ function paintPunctualityStatus(statusEl, fLite) {
 
                 const painted = paintPunctualityStatus(statusEl, fLite);
 
-                // === FLUJO AUTO: el backend decide ENTRADA/SALIDA ===
+                // === Determinar acción prevista (ENTRADA/SALIDA) ANTES de marcar ===
                 let sedeId = getSelectedSedeId();
                 if (!sedeId) {
                     const sedeFull = fFull && (fFull.sede || fFull.Sede);
                     sedeId = sedeFull && (sedeFull.sedeID ?? sedeFull.id ?? sedeFull.sedeid);
                 }
+                if (!sedeId) {
+                    showAlertCentered({ title: "Selecciona la sede antes de marcar", icon: "warning" });
+                    return;
+                }
 
-                // Determina si la ENTRADA estaría fuera de rango (según estado del match)
+                const existeAbierto = await hayRegistroAbiertoHoy(doc);
+                const accionPrevista = existeAbierto ? "SALIDA" : "ENTRADA";
+
+                // Determinar si se exige anotación
                 const estado = fLite && fLite.estado;
-                const FUERA_DE_RANGO_ENTRADA = estado === "TARDE" || estado === "ANTES_DEL_TURNO" || estado === "FUERA_DE_TURNO";
-
+                const FUERA_DE_RANGO_ENTRADA = (estado === "TARDE" || estado === "ANTES_DEL_TURNO" || estado === "FUERA_DE_TURNO");
                 const horaSalidaTurno = (fLite && (fLite.horaSalida || fLite.hora_salida || fLite.horasalida)) || null;
+                const FUERA_DE_RANGO_SALIDA  = isSalidaFueraDeRango(fLite, TOLERANCIA_SALIDA_MIN) || (estado === "FUERA_DE_TURNO");
 
-                // Siempre marcamos por el endpoint "auto" y le pasamos hora_salida_turno
+                let motivoPack = null;
+                const exigeAnotacion = (accionPrevista === "ENTRADA" && FUERA_DE_RANGO_ENTRADA) ||
+                    (accionPrevista === "SALIDA"  && FUERA_DE_RANGO_SALIDA);
+
+                if (exigeAnotacion) {
+                    // Pedir motivo + detalle OBLIGATORIOS; cancelar si no se diligencian
+                    motivoPack = await promptMotivoObligatorio(nombre, doc, fLite);
+                    if (!motivoPack) {
+                        showAlertCentered({ title: "Debes diligenciar motivo y detalle para continuar.", icon: "warning", timer: 2600 });
+                        return; // NO marcar
+                    }
+                }
+
+                // === Marcar (el backend decide realmente qué hace, pero ya validamos si exigir motivo) ===
                 const resMark = await marcarAutoSimple(doc, sedeId, /*fecha*/ null, horaSalidaTurno, TOLERANCIA_SALIDA_MIN);
                 if (resMark.ok) {
                     const d = resMark.data || {};
@@ -545,11 +615,16 @@ function paintPunctualityStatus(statusEl, fLite) {
                     // 🔄 Refrescar tabla YA (entrada o salida)
                     refreshRegistros(d);
 
+                    // Si exigimos motivo, guardar anotación obligatoria ahora
+                    if (motivoPack && motivoPack.motivo && motivoPack.anotacion) {
+                        await guardarAnotacion(doc, motivoPack.motivo, motivoPack.anotacion, todayYYYYMMDD(), nowHHmmss());
+                    }
+
                     if (accion === "SALIDA") {
-                        // Preferir bandera del backend; si no viene, calculamos local
-                        const fueraRangoSalida = (typeof d.salida_fuera_rango === "boolean")
-                            ? d.salida_fuera_rango
-                            : (isSalidaFueraDeRango(fLite, TOLERANCIA_SALIDA_MIN) || (estado === "FUERA_DE_TURNO"));
+                        const fueraRangoSalida =
+                            (typeof d.salida_fuera_rango === "boolean")
+                                ? d.salida_fuera_rango
+                                : FUERA_DE_RANGO_SALIDA;
 
                         showAlertCentered({
                             title: fueraRangoSalida
@@ -559,39 +634,13 @@ function paintPunctualityStatus(statusEl, fLite) {
                             icon:  fueraRangoSalida ? "warning" : "success",
                             timer: fueraRangoSalida ? 2600 : 2000
                         });
-
-                        // Si salida fuera de rango -> pedir motivo/anotación y guardar
-                        if (fueraRangoSalida) {
-                            const pick = await promptMotivoFueraDeRango(nombre, doc, fLite);
-                            if (pick && pick.motivo) {
-                                await guardarAnotacion(doc, pick.motivo, pick.anotacion, todayYYYYMMDD(), nowHHmmss());
-                            }
-                        }
                     } else if (accion === "ENTRADA") {
-                        if (!FUERA_DE_RANGO_ENTRADA) {
-                            showAlertCentered({
-                                title: `Entrada registrada ${d.hora_entrada ? `(${d.hora_entrada})` : ""}`,
-                                icon: "success",
-                                timer: 1700
-                            });
-                        } else {
-                            // Entrada fuera de rango: pedimos motivo -> anotación ya que el backend igual creó entrada
-                            const pick = await promptMotivoFueraDeRango(nombre, doc, fLite);
-                            if (pick && pick.motivo) {
-                                await guardarAnotacion(doc, pick.motivo, pick.anotacion, todayYYYYMMDD(), nowHHmmss());
-                                showAlertCentered({
-                                    title: `Entrada (fuera de rango) ${d.hora_entrada ? `(${d.hora_entrada})` : ""}`,
-                                    icon: "warning",
-                                    timer: 2200
-                                });
-                            } else {
-                                showAlertCentered({
-                                    title: "Entrada fuera de rango (sin motivo)",
-                                    icon: "warning",
-                                    timer: 2200
-                                });
-                            }
-                        }
+                        showAlertCentered({
+                            title: (FUERA_DE_RANGO_ENTRADA ? "Entrada (fuera de rango)" : "Entrada registrada") +
+                                (d.hora_entrada ? ` (${d.hora_entrada})` : ""),
+                            icon: FUERA_DE_RANGO_ENTRADA ? "warning" : "success",
+                            timer: FUERA_DE_RANGO_ENTRADA ? 2200 : 1700
+                        });
                     } else {
                         showAlertCentered({ title: "Marcación realizada", icon: "success", timer: 1600 });
                     }
